@@ -228,25 +228,20 @@ func GetFilesystemOverhead(ctx context.Context, client client.Client, pvc *corev
 // volume claim. The order of preference is the following:
 // 1. Defined value in CDI Config field scratchSpaceStorageClass.
 // 2. If 1 is not available, use the storage class name of the original pvc that will own the scratch pvc.
-// 3. If none of those are available, return blank.
+// 3. If the pvc does not specify a storage class, fall back to the storage class recorded in the CDIConfig status (typically the cluster's default storage class).
+// 4. If none of those are available, return blank.
 func GetScratchPvcStorageClass(client client.Client, pvc *corev1.PersistentVolumeClaim) string {
 	config := &cdiv1.CDIConfig{}
 	if err := client.Get(context.TODO(), types.NamespacedName{Name: common.ConfigName}, config); err != nil {
 		return ""
 	}
-	storageClassName := config.Status.ScratchSpaceStorageClass
-	if storageClassName == "" {
-		// Unable to determine scratch storage class, attempt to read the storage class from the pvc.
-		if pvc.Spec.StorageClassName != nil {
-			storageClassName = *pvc.Spec.StorageClassName
-			if storageClassName != "" {
-				return storageClassName
-			}
-		}
-	} else {
-		return storageClassName
+	if config.Spec.ScratchSpaceStorageClass != nil && *config.Spec.ScratchSpaceStorageClass != "" {
+		return *config.Spec.ScratchSpaceStorageClass
 	}
-	return ""
+	if pvc.Spec.StorageClassName != nil && *pvc.Spec.StorageClassName != "" {
+		return *pvc.Spec.StorageClassName
+	}
+	return config.Status.ScratchSpaceStorageClass
 }
 
 // DecodePublicKey turns a bunch of bytes into a public key
